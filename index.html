@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TETRIS</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles/main.css" />
+  </head>
+  <body>
+    <div class="game-wrap">
+      <header class="title-bar">TETRIS</header>
+      <div class="game-layout">
+        <aside class="side-panel left">
+          <section class="panel">
+            <h2>HOLD</h2>
+            <canvas id="hold-canvas" width="120" height="90"></canvas>
+          </section>
+          <section class="panel stats">
+            <div><span class="label">SCORE</span><span id="score">0</span></div>
+            <div><span class="label">LEVEL</span><span id="level">1</span></div>
+            <div><span class="label">LINES</span><span id="lines">0</span></div>
+            <div><span class="label">TIME</span><span id="time">00:00</span></div>
+          </section>
+          <section class="panel dancer-panel">
+            <h2>DANCER</h2>
+            <canvas id="character-canvas" width="120" height="140"></canvas>
+          </section>
+        </aside>
+
+        <main class="board-wrap">
+          <canvas id="board-canvas" width="300" height="600"></canvas>
+          <div id="level-up-flash" class="level-up-flash hidden"></div>
+
+          <!-- Pause overlay (shown when scene=playing and paused) -->
+          <div class="scene scene-pause hidden" data-scene="pause">
+            <div class="scene-inner">
+              <h2>PAUSED</h2>
+              <button class="menu-btn" data-action="resume">RESUME</button>
+              <button class="menu-btn" data-action="restart">RESTART</button>
+              <button class="menu-btn" data-action="main-menu">MAIN MENU</button>
+              <p class="hint">Press P to resume</p>
+            </div>
+          </div>
+
+          <!-- Game over overlay -->
+          <div class="scene scene-gameover hidden" data-scene="gameover">
+            <div class="scene-inner">
+              <h2>GAME OVER</h2>
+              <p class="go-stats">
+                SCORE <span id="go-score">0</span><br />
+                LINES <span id="go-lines">0</span> · LEVEL <span id="go-level">1</span>
+              </p>
+              <button class="menu-btn" data-action="restart">RESTART</button>
+              <button class="menu-btn" data-action="main-menu">MAIN MENU</button>
+              <p class="hint">Press R to restart</p>
+            </div>
+          </div>
+        </main>
+
+        <aside class="side-panel right">
+          <section class="panel">
+            <h2>NEXT</h2>
+            <canvas id="next-canvas" width="120" height="450"></canvas>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="help-bar">
+        <span>←→ MOVE</span>
+        <span>↓ SOFT</span>
+        <span>SPACE HARD</span>
+        <span>↑/X ROT</span>
+        <span>Z CCW</span>
+        <span>SHIFT HOLD</span>
+        <span>P PAUSE</span>
+        <span>R RESTART</span>
+      </footer>
+    </div>
+
+    <!-- Full-screen scenes -->
+    <div class="fullscene scene-title" data-scene="title">
+      <div class="scene-inner">
+        <h1 class="big-logo">TETRIS</h1>
+        <p class="tagline">retro edition</p>
+        <button class="menu-btn" data-action="start">START GAME</button>
+        <button class="menu-btn" data-action="leaderboard">LEADERBOARD</button>
+        <button class="menu-btn" data-action="howto">HOW TO PLAY</button>
+        <button class="menu-btn" data-action="settings">SETTINGS</button>
+      </div>
+    </div>
+
+    <div class="fullscene scene-howto hidden" data-scene="howto">
+      <div class="scene-inner">
+        <h2>HOW TO PLAY</h2>
+        <dl class="kv">
+          <dt>← →</dt><dd>Move left / right</dd>
+          <dt>↓</dt><dd>Soft drop</dd>
+          <dt>SPACE</dt><dd>Hard drop</dd>
+          <dt>↑ / X</dt><dd>Rotate clockwise</dd>
+          <dt>Z</dt><dd>Rotate counter-clockwise</dd>
+          <dt>SHIFT / C</dt><dd>Hold piece</dd>
+          <dt>P / ESC</dt><dd>Pause</dd>
+          <dt>R</dt><dd>Restart (game over)</dd>
+        </dl>
+        <p class="tips">
+          Clear lines to score. Chain clears for combo bonus.<br />
+          Back-to-Back Tetris / T-Spin gives ×1.5 score.<br />
+          Empty the board for a Perfect Clear bonus.
+        </p>
+        <button class="menu-btn" data-action="main-menu">BACK</button>
+      </div>
+    </div>
+
+    <div class="fullscene scene-leaderboard hidden" data-scene="leaderboard">
+      <div class="scene-inner leaderboard-inner">
+        <h2>LEADERBOARD</h2>
+        <div class="lb-wrap">
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>NAME</th>
+                <th>SCORE</th>
+                <th>LINES</th>
+                <th>LV</th>
+                <th>TIME</th>
+                <th>DATE</th>
+              </tr>
+            </thead>
+            <tbody id="lb-body"></tbody>
+          </table>
+          <p id="lb-empty" class="lb-empty hidden">NO RECORDS YET</p>
+        </div>
+        <div class="lb-actions">
+          <button class="menu-btn" data-action="main-menu">BACK</button>
+          <button class="menu-btn danger" data-action="clear-scores">CLEAR SCORES</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="fullscene scene-confirm hidden" data-scene="confirm">
+      <div class="scene-inner">
+        <h2 id="confirm-title">CONFIRM</h2>
+        <p id="confirm-body" class="confirm-body">Are you sure?</p>
+        <div class="confirm-actions">
+          <button class="menu-btn" data-action="confirm-cancel">CANCEL</button>
+          <button class="menu-btn danger" data-action="confirm-ok">CONFIRM</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="fullscene scene-name-input hidden" data-scene="name-input">
+      <div class="scene-inner">
+        <h2>NEW RECORD!</h2>
+        <p class="tagline">RANK <span id="ni-rank" class="val">1</span> · SCORE <span id="ni-score" class="val">0</span></p>
+        <form id="name-form" autocomplete="off">
+          <label>
+            <span>ENTER YOUR INITIALS</span>
+            <input id="ni-input" type="text" maxlength="3" pattern="[A-Za-z]{1,3}" required />
+          </label>
+          <button type="submit" class="menu-btn">SUBMIT</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="fullscene scene-settings hidden" data-scene="settings">
+      <div class="scene-inner">
+        <h2>SETTINGS</h2>
+        <div class="settings-grid">
+          <label>
+            <span>START LEVEL</span>
+            <input type="range" id="set-level" min="1" max="15" step="1" />
+            <span id="set-level-val" class="val">1</span>
+          </label>
+          <label class="toggle">
+            <span>CRT SCANLINES</span>
+            <input type="checkbox" id="set-crt" />
+          </label>
+          <label class="toggle">
+            <span>GHOST PIECE</span>
+            <input type="checkbox" id="set-ghost" />
+          </label>
+          <label>
+            <span>SFX VOLUME</span>
+            <input type="range" id="set-sfx-vol" min="0" max="100" step="5" />
+            <span id="set-sfx-vol-val" class="val">60</span>
+          </label>
+          <label class="toggle">
+            <span>SFX</span>
+            <input type="checkbox" id="set-sfx-on" />
+          </label>
+          <label>
+            <span>BGM VOLUME</span>
+            <input type="range" id="set-bgm-vol" min="0" max="100" step="5" />
+            <span id="set-bgm-vol-val" class="val">25</span>
+          </label>
+          <label class="toggle">
+            <span>BGM</span>
+            <input type="checkbox" id="set-bgm-on" />
+          </label>
+        </div>
+        <button class="menu-btn" data-action="main-menu">BACK</button>
+      </div>
+    </div>
+
+    <!-- CRT overlay (toggleable) -->
+    <div id="crt-overlay" class="crt-overlay hidden"></div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
