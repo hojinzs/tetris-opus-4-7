@@ -1,108 +1,129 @@
 # Tetris — AI Model Evaluation PRD
 
-> 본 문서는 **AI 모델별 구현 품질 평가**를 목적으로 하는 특수 PRD 입니다.
-> 동일한 스펙을 서로 다른 AI 모델이 구현하고, 그 결과물을 **누적 플레이 시간** 과 **플레이어 별점** 으로 비교합니다.
+> This document is a **special-purpose PRD for evaluating AI-model implementation quality**.
+> Different AI models receive this same spec and each implements a complete web Tetris build.
+> Results are then compared on **cumulative play time** and **player star ratings**.
 
 ---
 
-## 0. 문서의 목적 (Why this PRD exists)
+## 📌 Instructions to the Implementing AI (Read First)
 
-### 0.1 평가 대상
-- 동일 PRD 를 입력으로 받아 각 AI 모델이 **처음부터 끝까지** 구현한 웹 테트리스 빌드
+You are receiving this PRD as a standalone build brief. Follow these rules:
 
-### 0.2 평가 지표 (Scoring)
-1. **누적 플레이 시간 (Cumulative Play Time)**
-   - 단위: 초 (집계 시 분/시간으로 환산)
-   - 측정 범위: `GameState.Playing` 상태가 유지된 실시간 경과 시간의 합
-   - Paused / Menu / GameOver 상태는 제외
-   - 세션 수가 아닌 **총 플레이 길이** 를 집계하여 몰입도·재플레이 가치를 측정
-2. **플레이어 별점 (Player Rating)**
-   - 1 ~ 5 별 (정수)
-   - 게임오버 씬에서 수집
-   - 집계: 평균, 중앙값, 표본 수(n) 을 함께 보고
+1. **Do not ask the user clarifying questions.** Every decision not explicitly fixed in this document is left to your judgement — make it and move on. The user will not be available during implementation.
+2. **Implement the entire PRD end-to-end in a single run.** Work autonomously through every required section (§2 through §10 and §13 checklist).
+3. **Write and run tests.** Include automated checks that exercise core logic (SRS rotation, 7-bag fairness, scoring formulas, line-clear edge cases, lock delay cap, hold rules, perfect clear detection) and run them before declaring completion. Also run a live smoke check (e.g. static file server + headless or manual verification) to confirm the game boots and is playable.
+4. **Do not stop mid-way to confirm.** Do not send status updates. Do not ask whether to continue. Just build it.
+5. **Only report back once everything is done.** When and only when every item on the §13 submission checklist passes and all tests are green, produce a single completion report to the user summarizing:
+   - What was implemented (brief feature list)
+   - Test results (how many passed / how they were run)
+   - How to run the game locally
+   - Any creative choices you made in the DANCER area (§8)
+   - Any ambiguity you resolved yourself (note the decision, not a question)
+6. **Fairness constraint.** §2–§7 specs must be implemented **exactly as stated** — same numbers, same keys, same formulas, same color hex values, same storage keys. Creative freedom is allowed **only** in §8 (DANCER area).
 
-### 0.3 공정성 원칙 (Fairness Principle)
-- 아래 **§2 ~ §7** 에 정의된 모든 기능·수치·UI 는 **모델 간 동일하게 구현** 되어야 함
-- 모델별 창의성은 **§8 Dance 영역** 에서만 허용됨
-- 성능/입력 지연/프레임 레이트는 모든 모델이 동일한 기준을 만족해야 함
-- 외부 에셋(이미지·사운드 파일) 사용 금지 → 합성 SFX / 벡터 렌더링으로만 구성
+If you discover a true blocker that prevents completion, fix it or work around it with a reasonable default. Do not surface it as a question.
 
 ---
 
-## 1. 기술 스택 (고정)
+## 0. Purpose of This Document (Why This PRD Exists)
 
-| 항목 | 선택 | 비고 |
+### 0.1 What is being evaluated
+- A complete web-based Tetris build produced by an AI model that receives this PRD as its sole brief, and implements it **end-to-end** (spec → code → tests → polish).
+
+### 0.2 Scoring Criteria
+1. **Cumulative Play Time**
+   - Unit: seconds (aggregated to minutes/hours for reporting)
+   - Measured: wall-clock time spent in `GameState.Playing`
+   - Excluded: Paused / Menu / GameOver states
+   - Purpose: measures engagement and replay value across the total play length, not just session count.
+2. **Player Star Rating**
+   - Scale: 1–5 stars (integer)
+   - Collected: in the Game Over scene
+   - Aggregation: report mean, median, and sample size (n).
+
+### 0.3 Fairness Principle
+- Every functional spec / number / UI element defined in **§2 – §7** must be implemented **identically** across all model builds.
+- Model-specific creativity is only permitted in the **§8 DANCER area**.
+- Performance / input latency / frame rate must meet the same targets across every build.
+- No external assets (image / audio files). Everything must be synthesized from code or vector-rendered.
+
+---
+
+## 1. Tech Stack (Fixed)
+
+| Area | Choice | Notes |
 | --- | --- | --- |
-| 플랫폼 | 데스크톱 웹 브라우저 | Chrome / Firefox / Edge / Safari 최신 2개 버전 |
-| 언어 | HTML5 / CSS3 / Vanilla JavaScript (ES2020+) | **번들러 / 프레임워크 금지** |
-| 모듈 | ES Modules (`<script type="module">`) | |
-| 렌더링 | Canvas 2D API | WebGL / SVG 금지 |
-| 저장소 | `localStorage` | IndexedDB / 서버 저장 금지 |
-| 사운드 | Web Audio API (합성만) | 외부 오디오 파일 금지 |
-| 폰트 | Google Fonts `Press Start 2P` | 이 폰트만 허용 |
-| 에셋 | **외부 이미지/오디오 파일 0개** | 스프라이트는 코드로 정의 |
+| Platform | Desktop web browser | Latest 2 versions of Chrome / Firefox / Edge / Safari |
+| Language | HTML5 / CSS3 / Vanilla JavaScript (ES2020+) | **No bundlers / frameworks** |
+| Modules | ES Modules (`<script type="module">`) | |
+| Rendering | Canvas 2D API | No WebGL / SVG |
+| Storage | `localStorage` | No IndexedDB / server storage |
+| Sound | Web Audio API (synthesized only) | No external audio files |
+| Font | Google Fonts `Press Start 2P` | This font only |
+| Assets | **0 external image/audio files** | Sprites must be defined in code |
 
 ---
 
-## 2. 게임플레이 요구사항 (고정)
+## 2. Gameplay Requirements (Fixed)
 
-### 2.1 보드
-- 플레이필드: **10열 × 20행** (가시) + 상단 **2행 숨김 버퍼**
-- 셀 크기: **30px**
-- 블록: 7종 표준 테트로미노 (I, O, T, S, Z, J, L)
+### 2.1 Board
+- Playfield: **10 columns × 20 rows** (visible) + **2 hidden rows** above as spawn buffer
+- Cell size: **30px**
+- Blocks: 7 standard tetrominoes (I, O, T, S, Z, J, L)
 
-### 2.2 피스 생성
-- **7-Bag 랜덤화** (한 세트에 7종이 정확히 한 번씩 등장)
+### 2.2 Piece Generation
+- **7-bag randomization** (each set of 7 contains all 7 tetrominoes exactly once)
 
-### 2.3 조작 매핑 (고정)
-| 키 | 동작 |
+### 2.3 Controls (Fixed Mapping)
+| Key | Action |
 | --- | --- |
-| ← / → | 좌/우 이동 |
-| ↓ | 소프트 드롭 |
-| Space | 하드 드롭 |
-| ↑ / X | 시계 방향 회전 |
-| Z | 반시계 방향 회전 |
+| ← / → | Move left / right |
+| ↓ | Soft drop |
+| Space | Hard drop |
+| ↑ / X | Rotate clockwise |
+| Z | Rotate counter-clockwise |
 | Shift / C | Hold |
-| P / Esc | 일시정지 |
-| R | 재시작 (게임오버 후) |
+| P / Esc | Pause |
+| R | Restart (after game over) |
 
-### 2.4 입력 타이밍 (고정 수치)
+### 2.4 Input Timing (Fixed Values)
 - **DAS (Delayed Auto Shift)**: `170ms`
 - **ARR (Auto Repeat Rate)**: `50ms`
-- **Soft Drop Factor**: 중력의 `20×`
+- **Soft Drop Factor**: `20×` gravity
 
-### 2.5 회전 시스템
-- **SRS (Super Rotation System)** 표준 구현
-- 벽차기(Wall Kick) 테이블: SRS 표준 (I 피스 별도 테이블)
+### 2.5 Rotation System
+- **SRS (Super Rotation System)** — standard implementation
+- Wall-kick table: SRS standard (separate table for the I piece)
 
-### 2.6 모던 피처 (고정)
-- **Hold**: 피스 고정 전까지 세션당 1회 사용 가능
-- **Next Queue**: 다음 **5개** 미리보기
-- **Ghost Piece**: 반투명으로 하드 드롭 위치 표시 (설정 토글 가능)
-- **Lock Delay**: `500ms` 유예, 이동/회전 시 리셋, 최대 **15회**
+### 2.6 Modern Features (Fixed)
+- **Hold**: one use per piece (until the piece locks)
+- **Next Queue**: **5-piece** preview
+- **Ghost Piece**: semi-transparent drop target (toggle in settings)
+- **Lock Delay**: `500ms` grace, reset on move/rotate, **max 15** resets
 
 ---
 
-## 3. 스코어링 & 레벨 (고정 공식)
+## 3. Scoring & Level (Fixed Formulas)
 
-### 3.1 레벨 진행
-- 시작 레벨: 1 (설정에서 1 ~ 15 선택 가능)
-- 레벨업: 매 **10라인** 클리어 시 +1
-- 중력 공식:
+### 3.1 Level Progression
+- Start level: 1 (user-selectable 1–15 in settings)
+- Level up: +1 every **10 lines** cleared
+- Gravity formula:
   ```js
   gravityMs(level) = Math.pow(0.8 - (level - 1) * 0.007, level - 1) * 1000
   ```
 
-### 3.2 라인 클리어 점수
-| 라인 | 기본 점수 |
+### 3.2 Line Clear Scores
+| Lines | Base Score |
 | --- | --- |
 | Single | `100 × level` |
 | Double | `300 × level` |
 | Triple | `500 × level` |
 | Tetris | `800 × level` |
 
-### 3.3 T-Spin 점수
-| 동작 | 점수 |
+### 3.3 T-Spin Scores
+| Action | Score |
 | --- | --- |
 | T-Spin (no lines) | `400 × level` |
 | T-Spin Single | `800 × level` |
@@ -111,20 +132,20 @@
 | T-Spin Mini | `100 × level` |
 | T-Spin Mini Single | `200 × level` |
 
-T-Spin 판정: **3-Corner Rule + 5번째 킥 예외** 규칙을 적용.
+T-Spin detection: **3-Corner Rule + 5th-kick exception**.
 
 ### 3.4 Back-to-Back (B2B)
-- Tetris 또는 T-Spin 라인 클리어 **연속 성공** 시 해당 점수 × `1.5`
-- 일반 1~3라인 클리어로 끊어짐
+- Successive Tetris or T-Spin line clears multiply that clear’s score by `1.5`.
+- Broken by any 1–3 line clear that isn’t a T-Spin.
 
-### 3.5 콤보
-- 연속 라인 클리어 시 `50 × combo × level` 추가
-- 라인 클리어가 0인 고정에서 리셋
+### 3.5 Combo
+- Successive line clears award `50 × combo × level`.
+- Reset when a lock places without clearing any line.
 
-### 3.6 기타 점수
-- Soft Drop: 이동 셀당 `+1`
-- Hard Drop: 이동 셀당 `+2`
-- Perfect Clear 보너스:
+### 3.6 Other Scoring
+- Soft Drop: `+1` per cell moved
+- Hard Drop: `+2` per cell moved
+- Perfect Clear bonus:
   - Single: `800 × level`
   - Double: `1200 × level`
   - Triple: `1800 × level`
@@ -132,9 +153,9 @@ T-Spin 판정: **3-Corner Rule + 5번째 킥 예외** 규칙을 적용.
 
 ---
 
-## 4. 화면 구성 (고정)
+## 4. Screen Layout (Fixed)
 
-### 4.1 레이아웃
+### 4.1 Layout
 ```
 ┌─────────────────────────────────────────────────┐
 │                    TETRIS                       │
@@ -149,63 +170,63 @@ T-Spin 판정: **3-Corner Rule + 5번째 킥 예외** 규칙을 적용.
 ├──────────────┤                   │              │
 │  DANCER      │                   │              │
 │  (120×140)   │                   │              │
-│  ★ 창의영역  │                   │              │
+│  ★ creative  │                   │              │
 └──────────────┴───────────────────┴──────────────┘
          ← MOVE ↓ SOFT SPACE HARD ↑/X ROT Z CCW SHIFT HOLD P PAUSE R RESTART
 ```
 
-### 4.2 씬 구성 (고정, 8개)
+### 4.2 Scenes (Fixed — 8 + How-To)
 1. **Title / Main Menu**: `START GAME`, `LEADERBOARD`, `HOW TO PLAY`, `SETTINGS`
-2. **Playing** (게임 화면)
+2. **Playing** (in-game HUD)
 3. **Pause Overlay**: `RESUME`, `RESTART`, `MAIN MENU`
-4. **Game Over Overlay**: 최종 SCORE / LINES / LEVEL + `RESTART`, `MAIN MENU`
-5. **Name Input (New Record)**: 3글자 이니셜 입력
-6. **Leaderboard**: 상위 10개 테이블 (#, NAME, SCORE, LINES, LV, TIME, DATE) + `CLEAR SCORES`
-7. **Confirm Dialog** (예: CLEAR SCORES 확인)
-8. **Settings**: 시작 레벨, CRT 스캔라인, 고스트, SFX/BGM 볼륨·ON/OFF
-9. **How to Play**: 키 매핑 + 규칙 요약
+4. **Game Over Overlay**: final SCORE / LINES / LEVEL + `RESTART`, `MAIN MENU`
+5. **Name Input (New Record)**: 3-character initials
+6. **Leaderboard**: top-10 table (#, NAME, SCORE, LINES, LV, TIME, DATE) + `CLEAR SCORES`
+7. **Confirm Dialog** (e.g. CLEAR SCORES confirmation)
+8. **Settings**: start level, CRT scanlines, ghost, SFX/BGM volume & ON/OFF
+9. **How to Play**: key map + rules summary
 
-### 4.3 시각 스타일 (고정)
-- 레트로 픽셀 / NES 풍 도트 그래픽
-- 폰트: `Press Start 2P`
-- 블록 색상 (고정):
+### 4.3 Visual Style (Fixed)
+- Retro pixel / NES-style dot graphics
+- Font: `Press Start 2P`
+- Block colors (fixed):
   - `I=#00f0f0`, `O=#f0f000`, `T=#a000f0`, `S=#00f000`, `Z=#f00000`, `J=#0000f0`, `L=#f0a000`
   - Ghost: `rgba(255,255,255,0.22)`
   - Empty: `#14141f`
-- 블록에 픽셀 테두리 + 내부 하이라이트/그림자 (3D 느낌)
-- **CRT 스캔라인** 오버레이 (설정에서 토글)
+- Pixel border on blocks + interior highlight/shadow for a 3D feel
+- **CRT scanline** overlay (toggleable in settings)
 
-### 4.4 애니메이션 / 이펙트 (고정)
-- 라인 클리어: 플래시 후 제거 애니메이션 (~300ms, 8Hz 스트로브)
-- Tetris / T-Spin / Perfect Clear: 화면 흔들림 (강도·지속 차등)
-- 레벨업: 보드 오버레이 노랑 플래시 + 테두리 글로우
-- 스코어 증가: 틱커 펄스 애니메이션
-- 보드 중앙 팝업 ("TETRIS • B2B • +1,250" 등)
+### 4.4 Animations / Effects (Fixed)
+- Line clear: flash then clear animation (~300ms, 8Hz strobe)
+- Tetris / T-Spin / Perfect Clear: screen shake (intensity & duration tiered)
+- Level up: yellow flash overlay on board + border glow
+- Score increment: ticker pulse animation
+- Centered board popup (e.g. `TETRIS • B2B • +1,250`)
 
 ---
 
-## 5. 사운드 (고정, 합성만)
+## 5. Sound (Fixed, Synthesized Only)
 
-### 5.1 효과음 (최소 10종)
+### 5.1 SFX (Minimum 10)
 - `move`, `rotate`, `lock`, `hardDrop`, `hold`
-- `lineClear(n)` (1~3 / Tetris 차등)
+- `lineClear(n)` (1–3 vs Tetris differentiated)
 - `tSpin`, `levelUp`, `gameOver`, `perfectClear`
-- Web Audio API `OscillatorNode` / `GainNode` 로 합성 (외부 파일 금지)
+- Synthesized via Web Audio API `OscillatorNode` / `GainNode` (no external files)
 
 ### 5.2 BGM
-- 루프 배경 음악 1곡 이상 (칩튠 스타일, 코드 내 합성)
-- 브라우저 autoplay 정책 대응: 첫 사용자 입력에서 `AudioContext.resume()` 호출
-- 설정에서 ON/OFF 및 음량 조절
+- At least one looping background track (chiptune style, synthesized in code)
+- Handle browser autoplay policy: call `AudioContext.resume()` on first user input
+- ON/OFF and volume controls in settings
 
 ---
 
-## 6. 리더보드 (로컬, 고정 스키마)
+## 6. Leaderboard (Local, Fixed Schema)
 
-### 6.1 저장
-- `localStorage` 키: `tetris_leaderboard_v1`
-- 상위 **10개** 유지
+### 6.1 Storage
+- `localStorage` key: `tetris_leaderboard_v1`
+- Keep top **10** entries
 
-### 6.2 엔트리 스키마
+### 6.2 Entry Schema
 ```json
 {
   "name": "AAA",
@@ -217,86 +238,86 @@ T-Spin 판정: **3-Corner Rule + 5번째 킥 예외** 규칙을 적용.
 }
 ```
 
-### 6.3 신기록 처리
-- 점수가 기존 10위 안에 들면 이니셜 입력 씬으로 이동
-- 입력 완료 시 목록에 삽입 → 정렬 → 상위 10개만 유지
-- 리더보드 화면에서 해당 행 하이라이트
+### 6.3 New Record Flow
+- If the score places in the top 10, advance to the initials input scene.
+- On submit: insert → sort → trim to top 10.
+- Highlight the newly-inserted row on the leaderboard screen.
 
 ---
 
-## 7. 게임 오버 & 일시정지
+## 7. Game Over & Pause
 
-### 7.1 게임 오버 조건
-- 새 피스를 스폰 위치(숨김 버퍼)에 배치 불가 시 (Block Out)
-- 피스가 보드 상단 경계를 넘어 고정 시 (Lock Out)
+### 7.1 Game Over Conditions
+- New piece cannot be placed in the spawn buffer (Block Out)
+- A piece locks entirely above the visible play area (Lock Out)
 
-### 7.2 일시정지
-- `P` / `Esc` 로 토글
-- 일시정지 중에는 **모든 애니메이션 동결**, **플레이 시간 계측 중단**
+### 7.2 Pause
+- Toggled by `P` / `Esc`
+- While paused: **freeze all animations** and **stop play-time measurement**
 
 ---
 
-## 8. DANCER 영역 (창의 영역 — 모델별 자유 구현)
+## 8. DANCER Area (Creative Freedom — Model-Specific)
 
-> 이 섹션은 **유일하게 창의성이 허용되는 구역**입니다. 모델의 개성을 드러낼 수 있는 공간이며, 평가 시 별점에 간접 반영될 수 있습니다.
+> This is the **only section where creativity is permitted**. It is the model’s signature space and will indirectly influence star ratings.
 
-### 8.1 고정 제약 (반드시 준수)
-- 위치: 좌측 사이드 패널 내 `DANCER` 라벨 섹션
-- 캔버스 크기: **120 × 140 px**
-- Canvas 2D 로 렌더링 (이미지 파일 금지, 코드로 스프라이트 정의)
-- 프레임 레이트: 게임 루프와 동일하게 60fps 유지
-- 게임 성능에 악영향을 주지 않을 것 (프레임당 예산 ≤ 2ms 권장)
+### 8.1 Fixed Constraints (Must Comply)
+- Location: a panel labeled `DANCER` in the left side panel
+- Canvas size: **120 × 140 px**
+- Rendered with Canvas 2D (no image files — sprites defined in code)
+- Must sustain 60fps alongside the game loop
+- Must not harm game performance (target per-frame budget ≤ 2ms)
 
-### 8.2 필수 반응 트리거
-아래 이벤트에서 **시각적으로 구별되는 반응** 이 반드시 발생해야 합니다.
+### 8.2 Required Reaction Triggers
+The following events must each produce a **visually distinguishable** reaction:
 
-| 트리거 | 기대 반응 강도 | 권장 지속 |
+| Trigger | Expected Intensity | Suggested Duration |
 | --- | --- | --- |
-| Triple (3줄 클리어) | 보통 | ~1.6초 |
-| Tetris (4줄 클리어) | 강함 | ~2.8초 |
-| T-Spin (1줄+) | 강함 | ~2.2초 |
-| Combo ≥ 3 | 보통 (연쇄 강화) | `1.4s + combo × 0.15s` |
-| Level Up | 강함 | ~2.0초 |
-| Perfect Clear | 최강 | ~4.0초 |
-| Game Over | 리셋 (평정/쓰러짐) | 즉시 |
+| Triple (3-line clear) | Medium | ~1.6s |
+| Tetris (4-line clear) | Strong | ~2.8s |
+| T-Spin (1+ lines) | Strong | ~2.2s |
+| Combo ≥ 3 | Medium (escalating) | `1.4s + combo × 0.15s` |
+| Level Up | Strong | ~2.0s |
+| Perfect Clear | Maximum | ~4.0s |
+| Game Over | Reset (calm/collapse) | Immediate |
 
-Idle 상태(아무 이벤트 없음)에서도 **미세한 움직임**(흔들림/호흡 등) 이 보여야 함.
+In the idle state (no events), the character must still show **subtle motion** (bobbing / breathing / idle sway).
 
-### 8.3 API 계약
-모델은 아래 시그니처를 export 해야 합니다. 이름이 동일하면 내부 구현은 자유입니다.
+### 8.3 API Contract
+The model must export the following three functions. As long as the names match, the internal implementation is free:
 ```js
-// 매 프레임 호출 — 캐릭터를 ctx 위에 그린다
+// Called every frame — draw the character onto ctx
 export function renderCharacter(ctx: CanvasRenderingContext2D, nowMs: number): void;
 
-// 이벤트 발생 시 호출 — 반응을 예약한다
-// power: 1(보통) / 2(강함) / 3(최강)
+// Called on event — schedule a reaction
+// power: 1 (medium) / 2 (strong) / 3 (max)
 export function triggerDance(durationMs?: number, power?: number): void;
 
-// 게임 리셋/종료 시 호출
+// Called on game reset / game over
 export function resetDance(): void;
 ```
 
-### 8.4 자유 영역
-- 캐릭터의 외형, 색상, 팔·다리 개수, 스타일(도트/벡터/파티클/기하도형 등)
-- 반응 모션 (바운스 / 회전 / 스파클 / 색상 변화 / 카메라 줌 등)
-- 배경 (단색 / 그라디언트 / 추상 패턴)
-- 서사적 요소 (눈 깜빡임, 윙크, 피곤한 표정 등)
+### 8.4 Free-Choice Surface
+- Character appearance: color, limbs, style (pixel / vector / particles / geometric, etc.)
+- Reaction motion: bounce / spin / sparkle / color shift / camera zoom / etc.
+- Background: solid / gradient / abstract pattern
+- Narrative flourishes: blinking, winking, tired face, etc.
 
 ---
 
-## 9. 평가용 텔레메트리 (고정)
+## 9. Evaluation Telemetry (Fixed)
 
-> AI 모델 간 공정 비교를 위해 아래 계측 포인트를 **반드시 동일하게** 구현합니다.
+> These instrumentation points must be implemented **identically** across every model build for fair comparison.
 
-### 9.1 플레이 시간 집계
-- `localStorage` 키: `tetris_eval_v1`
-- `GameState.Playing` 진입 시각과 이탈 시각의 차이를 초 단위로 누적
-- Pause 중에는 일시중지되어야 함
+### 9.1 Play-Time Aggregation
+- `localStorage` key: `tetris_eval_v1`
+- Accumulate seconds spent in `GameState.Playing` (enter-time to exit-time deltas)
+- Must pause accumulation while Paused
 
-### 9.2 별점 수집 UI
-- 게임 오버 씬에 **1~5 별 선택 UI** 를 표시 (버튼 또는 ★ 토글)
-- 별점은 선택 사항 (SKIP 가능)
-- 제출 시 아래 스키마로 저장:
+### 9.2 Star Rating UI
+- Game Over scene must present a **1–5 star selector** (buttons or ★ toggles)
+- Rating is optional (SKIP must be available)
+- On submit, persist with this schema:
 
 ```json
 {
@@ -315,26 +336,26 @@ export function resetDance(): void;
 }
 ```
 
-### 9.3 집계 규칙
-- 별점 평균: 단순 산술평균 (소수 2자리)
-- 중앙값 병기, 표본 수 `n ≥ 10` 일 때만 유의미하게 표시
-- 누적 플레이 시간: 모든 세션 `durationSec` 합계
+### 9.3 Aggregation Rules
+- Star average: simple arithmetic mean (2 decimal places)
+- Also report median and sample size; only consider meaningful when `n ≥ 10`
+- Cumulative play time: sum of all `durationSec`
 
 ---
 
-## 10. 성능 요구사항 (고정 목표)
+## 10. Performance Requirements (Fixed Targets)
 
-| 항목 | 목표 |
+| Metric | Target |
 | --- | --- |
-| 프레임 레이트 | **60fps** 유지 (P99 프레임 ≤ 16.8ms) |
-| 입력 지연 | 키 누름 → 화면 반영 **≤ 50ms** |
-| SRS 회전/벽차기 | 표준 가이드라인과 **100% 일치** |
-| 메모리 누수 | 30분 연속 플레이 후 힙 성장 < 20MB |
-| 드롭 프레임 | 일반 플레이 중 드롭 프레임 수 = 0 |
+| Frame rate | Sustain **60fps** (P99 frame ≤ 16.8ms) |
+| Input latency | Key press → screen reflection **≤ 50ms** |
+| SRS rotation / wall kicks | **100% match** with standard guideline |
+| Memory leak | Heap growth < 20MB after 30 min continuous play |
+| Dropped frames | 0 during normal gameplay |
 
 ---
 
-## 11. 파일 구조 (권장)
+## 11. File Structure (Recommended)
 
 ```
 tetris-game/
@@ -342,58 +363,60 @@ tetris-game/
 ├── styles/
 │   └── main.css
 ├── src/
-│   ├── main.js            # 엔트리, 씬 매니저, 평가 텔레메트리
-│   ├── game.js            # 상태 머신
-│   ├── board.js           # 충돌, 이동, 회전, 락, 라인 클리어
-│   ├── piece.js           # 테트로미노 정의
+│   ├── main.js            # entry point, scene manager, eval telemetry
+│   ├── game.js            # state machine
+│   ├── board.js           # collision, movement, rotation, lock, line clear
+│   ├── piece.js           # tetromino definitions
 │   ├── bag.js             # 7-bag
-│   ├── srs.js             # SRS 월킥 테이블
-│   ├── scoring.js         # 점수 / B2B / Combo / PC / T-Spin
-│   ├── input.js           # 키보드 + DAS/ARR
-│   ├── renderer.js        # Canvas 렌더
+│   ├── srs.js             # SRS wall-kick tables
+│   ├── scoring.js         # scoring / B2B / Combo / PC / T-Spin
+│   ├── input.js           # keyboard + DAS/ARR
+│   ├── renderer.js        # Canvas rendering
 │   ├── audio.js           # Web Audio API
-│   ├── leaderboard.js     # localStorage 랭킹
-│   ├── settings.js        # localStorage 설정
-│   ├── character.js       # ★ DANCER (창의 영역)
-│   ├── eval.js            # ★ 평가용 텔레메트리 (플레이 시간 / 별점)
-│   └── config.js          # 상수
+│   ├── leaderboard.js     # localStorage ranking
+│   ├── settings.js        # localStorage settings
+│   ├── character.js       # ★ DANCER (creative area)
+│   ├── eval.js            # ★ evaluation telemetry (play time / ratings)
+│   └── config.js          # constants
 └── PRD_AI_EVAL.md
 ```
 
-`★` 표시된 모듈은 평가 특화. 특히 `character.js` 는 자유 구현, `eval.js` 는 동일 구현.
+Modules marked `★` are evaluation-specific. `character.js` is a free implementation; `eval.js` must be implemented identically across models.
 
 ---
 
-## 12. 비목표 (Out of Scope)
+## 12. Non-Goals (Out of Scope)
 
-- 온라인 멀티플레이 / 서버 랭킹
-- 모바일 터치 조작
-- 계정 / 로그인
-- 커스텀 키 리바인딩
-- 추가 게임 모드 (스프린트 / 40L / 마라톤 외)
-
----
-
-## 13. 제출 체크리스트 (AI 모델용)
-
-구현 완료 시 아래 항목이 모두 충족되어야 합니다.
-
-- [ ] §2 ~ §7 기능 전부 동일 수치·동일 키 매핑으로 구현
-- [ ] §3 스코어링 공식 값까지 정확히 일치
-- [ ] §4.3 블록 색상 HEX 값 정확히 일치
-- [ ] §5 사운드 10종 + BGM 합성으로 구현 (외부 에셋 0개)
-- [ ] §6 리더보드 스키마 정확히 일치 (`tetris_leaderboard_v1`)
-- [ ] §8 DANCER API 3종 export + 7종 트리거 반응 확인
-- [ ] §9 평가 텔레메트리 `tetris_eval_v1` 스키마로 수집
-- [ ] §10 성능 목표 달성 (프레임 레이트·입력 지연)
-- [ ] 외부 번들러 없이 정적 파일 서빙만으로 실행 가능
-- [ ] 게임오버 씬에서 별점 1~5 UI 노출 및 저장
+- Online multiplayer / server-based rankings
+- Mobile / touch controls
+- Accounts / login
+- Custom key rebinding
+- Extra modes (Sprint / 40L / Marathon variants etc.)
 
 ---
 
-## 14. 평가 리포트 템플릿
+## 13. Submission Checklist (for the Implementing AI)
 
-각 AI 모델 빌드는 아래 형식으로 집계되어 비교됩니다.
+On completion, all of the following must hold:
+
+- [ ] All features in §2–§7 implemented with identical values and key mappings
+- [ ] Scoring formulas in §3 match exactly
+- [ ] Block color hex values in §4.3 match exactly
+- [ ] 10 SFX + BGM synthesized (0 external assets) per §5
+- [ ] Leaderboard schema in §6 matches exactly (`tetris_leaderboard_v1`)
+- [ ] DANCER API in §8 exports the 3 functions + all 7 required trigger reactions visible
+- [ ] Evaluation telemetry stored under `tetris_eval_v1` per §9
+- [ ] Performance targets in §10 met (frame rate / input latency)
+- [ ] Runs with static file serving only — no bundler required
+- [ ] Game Over scene shows a 1–5 star rating UI and persists the rating
+- [ ] Automated tests cover core logic and pass
+- [ ] A live smoke test confirmed the game boots and is playable
+
+---
+
+## 14. Evaluation Report Template
+
+Each AI-model build is summarized in this form for side-by-side comparison:
 
 ```
 Model: <model-name>
@@ -420,4 +443,14 @@ Build date: <YYYY-MM-DD>
 
 ---
 
-끝.
+## 15. Completion Report (What to Return to the User)
+
+When the entire PRD is implemented and all tests are passing, send **one** completion message to the user containing:
+
+1. **Summary of what was built** — a short feature list mapped to §2–§9.
+2. **Test results** — how tests were structured, how many pass, how to re-run them.
+3. **How to run locally** — e.g. `npx http-server . -p 5173` and the URL to open.
+4. **DANCER creative notes** — describe the character, its motion, and the reaction mapping you chose.
+5. **Resolved ambiguities** — list any open choice you made and the decision (do not ask the user).
+
+Do not send any intermediate status messages. One report at the end. Done.
